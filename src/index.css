@@ -1,0 +1,10 @@
+@import './styles/tokens.css';
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; background: var(--background); color: var(--ink); font: 14px/1.5 'Segoe UI', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+button, input, select { font: inherit; }
+button, select { cursor: pointer; }
+button, a { color: inherit; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--impact-blue-400); outline-offset: 3px; }
+button:disabled { cursor: not-allowed; opacity: .45; }
+svg { width: 19px; height: 19px; stroke-width: 1.7; flex-shrink: 0; }
+h1, h2, h3, p { margin: 0; }
