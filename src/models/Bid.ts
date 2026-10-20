@@ -11,6 +11,17 @@ export interface Bid {
   teamsUrl?: string
   sourceSystem: SourceSystem
   externalId?: string
+  estimatedValue?: number
+  currency?: string
+  /** Explicit demo assumption, expressed as a fraction from 0 to 1. */
+  probability?: number
+  createdDate?: string
+  expectedDecisionDate?: string
+  actualCloseDate?: string
+  lastActivityDate?: string
+  nextActionDate?: string
+  bidOwnerId?: string
 }
 export type CreateBidInput = Pick<Bid, 'customerId' | 'bidTitle' | 'stage' | 'category' | 'coOwner'>
 export type UpdateBidInput = Partial<CreateBidInput>
+

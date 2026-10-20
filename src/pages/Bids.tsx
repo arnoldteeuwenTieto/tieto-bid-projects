@@ -23,13 +23,20 @@ export function Bids({ service = bidService, customers = customerService }: { se
   }, [service, customers])
   const { data, setData, loading, error, retry } = useAsyncData(load)
   const [search, setSearch] = useState('')
-  const [stage, setStage] = useState('')
-  const [category, setCategory] = useState('')
   const [page, setPage] = useState(1)
   const [sort, setSort] = useState<{ key: BidSortKey; ascending: boolean }>({ key: 'bidTitle', ascending: true })
   const [notice, setNotice] = useState('')
   const [revision, setRevision] = useState(0)
   const [params, setParams] = useSearchParams()
+  const stage = params.get('stage') ?? ''
+  const category = params.get('category') ?? ''
+  function setStage(value: string) { const next = new URLSearchParams(params); if (value) next.set('stage', value); else next.delete('stage'); setParams(next) }
+  function setCategory(value: string) { const next = new URLSearchParams(params); if (value) next.set('category', value); else next.delete('category'); setParams(next) }
+  const scope = params.get('scope') ?? undefined
+  const createdFrom = params.get('createdFrom') ?? undefined
+  const createdTo = params.get('createdTo') ?? undefined
+  const closedFrom = params.get('closedFrom') ?? undefined
+  const closedTo = params.get('closedTo') ?? undefined
   const customerId = params.get('customerId')
   const { recordId } = useParams()
   const location = useLocation()
@@ -37,7 +44,7 @@ export function Bids({ service = bidService, customers = customerService }: { se
   const creating = location.pathname === '/bids/new'
   const query = params.toString() ? `?${params}` : ''
   const customer = data?.customers.find(customer => customer.id === customerId)
-  const filtered = useMemo(() => selectBids(data?.bids ?? [], data?.customers ?? [], { search, stage, category, customerId, sortKey: sort.key, ascending: sort.ascending }), [data, search, stage, category, customerId, sort])
+  const filtered = useMemo(() => selectBids(data?.bids ?? [], data?.customers ?? [], { search, stage, category, customerId, sortKey: sort.key, ascending: sort.ascending, scope, createdFrom, createdTo, closedFrom, closedTo }), [data, search, stage, category, customerId, sort, scope, createdFrom, createdTo, closedFrom, closedTo])
   const scopedBids = (data?.bids ?? []).filter(bid => !customerId || bid.customerId === customerId)
   const pages = Math.max(1, Math.ceil(filtered.length / 10))
   const currentPage = Math.min(page, pages)
@@ -51,7 +58,7 @@ export function Bids({ service = bidService, customers = customerService }: { se
     if (customerId) nextParams.set('customerId', bid.customerId)
     navigate(`/bids/${encodeURIComponent(bid.id)}${nextParams.size ? `?${nextParams}` : ''}`)
   }
-  function clearFilters() { setSearch(''); setStage(''); setCategory(''); setPage(1); const next = new URLSearchParams(params); next.delete('customerId'); setParams(next) }
+  function clearFilters() { setSearch(''); setPage(1); const next = new URLSearchParams(params); for (const key of ['customerId', 'stage', 'category', 'scope', 'createdFrom', 'createdTo', 'closedFrom', 'closedTo']) next.delete(key); setParams(next) }
   return <>
     <div className="page-heading"><div><div className="eyebrow">FROM OPPORTUNITY TO PARTNERSHIP</div><h1>Bids<span className="heading-dot">.</span></h1><p>A shared view of your opportunities, from first idea to a winning bid.</p></div><Link className="primary-button" to={`/bids/new${query}`}><Plus />New Bid</Link></div>
     <div className="stats-grid">{[
@@ -63,6 +70,7 @@ export function Bids({ service = bidService, customers = customerService }: { se
     <section className="card directory" aria-label="Bid directory">
       <div className="directory-title"><h2>Bid directory <span>{scopedBids.length}</span></h2><span className="subtle">Bring every opportunity into focus</span></div>
       {customerId && <div className="customer-filter"><span>Customer: <strong>{customer?.customerName ?? customerId}</strong></span><button className="icon-button" aria-label="Remove customer filter" onClick={() => { const next = new URLSearchParams(params); next.delete('customerId'); setParams(next); setPage(1) }}><X /></button></div>}
+      {(scope || createdFrom || closedFrom) && <div className="customer-filter"><span>Dashboard scope: {scope ?? 'all bids'}{createdFrom ? ` · created ${createdFrom}–${createdTo ?? 'present'}` : ''}{closedFrom ? ` · closed ${closedFrom}–${closedTo ?? 'present'}` : ''}</span><button className="icon-button" aria-label="Clear dashboard filters" onClick={clearFilters}><X /></button></div>}
       <div className="directory-tools bid-tools"><div className="bid-filters"><label htmlFor="stage-filter">Stage<select id="stage-filter" value={stage} onChange={event => { setStage(event.target.value); setPage(1) }}><option value="">All stages</option>{Array.from(new Set([...bidStages, ...(data?.bids.map(bid => bid.stage) ?? [])])).map(value => <option key={value}>{value}</option>)}</select></label><label htmlFor="category-filter">Category<select id="category-filter" value={category} onChange={event => { setCategory(event.target.value); setPage(1) }}><option value="">All categories</option>{Array.from(new Set([...bidCategories, ...(data?.bids.map(bid => bid.category) ?? [])])).map(value => <option key={value}>{value}</option>)}</select></label></div><div className="search-field"><Search /><input aria-label="Search bids by title or customer" placeholder="Search bids or customers…" value={search} onChange={event => { setSearch(event.target.value); setPage(1) }} />{search && <button className="icon-button" aria-label="Clear search" onClick={() => { setSearch(''); setPage(1) }}><X /></button>}</div></div>
       {loading ? <div className="empty-state" role="status">Loading bids…</div> : error ? <div className="empty-state" role="alert"><h3>Bids unavailable</h3><p>{error}</p><button className="secondary-button" onClick={retry}>Try again</button></div> : <>
         <div className="table-scroll"><table><thead><tr>{columns.map(({ key, label }) => <th key={key} aria-sort={sort.key === key ? sort.ascending ? 'ascending' : 'descending' : 'none'}><button onClick={() => { setSort({ key, ascending: sort.key === key ? !sort.ascending : true }); setPage(1) }}>{label}{sort.key === key ? sort.ascending ? <ArrowUp /> : <ArrowDown /> : <ArrowUpDown />}</button></th>)}<th>Actions</th></tr></thead><tbody>{visible.map(bid => <tr key={bid.id} onClick={event => { event.currentTarget.querySelector<HTMLAnchorElement>('a')?.focus(); navigate(`/bids/${encodeURIComponent(bid.id)}${query}`) }}><td><Link className="customer-link bid-title-link" onClick={event => event.stopPropagation()} to={`/bids/${encodeURIComponent(bid.id)}${query}`}><span className="company-avatar"><FileText /></span><span>{bid.bidTitle}<small>{bid.id}</small></span></Link></td><td>{bid.customerName}</td><td><span className="bid-stage">{bid.stage}</span></td><td>{bid.category}</td><td>{bid.coOwner || '—'}</td><td><Link className="icon-button" aria-label={`View ${bid.bidTitle}`} to={`/bids/${encodeURIComponent(bid.id)}${query}`} onClick={event => event.stopPropagation()}><ChevronRight /></Link></td></tr>)}</tbody></table></div>
@@ -75,3 +83,4 @@ export function Bids({ service = bidService, customers = customerService }: { se
     {recordId && <BidDetails key={`${recordId}-${revision}`} bidId={recordId} service={service} customers={customers} onClose={() => navigate(`/bids${query}`)} onSave={saved} />}
   </>
 }
+

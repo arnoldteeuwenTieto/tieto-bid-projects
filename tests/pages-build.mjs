@@ -10,7 +10,7 @@ try {
   const address = server.httpServer.address()
   assert.ok(address && typeof address === 'object')
   const root = `http://127.0.0.1:${address.port}`
-  for (const route of ['customers', 'bids', 'bids/new?customerId=1']) {
+  for (const route of ['dashboard', 'dashboard?period=30&stage=Draft', 'customers', 'bids', 'bids/new?customerId=1']) {
     const response = await fetch(`${root}/tieto-bid-projects/#/${route}`)
     assert.equal(response.status, 200)
     const html = await response.text()
@@ -29,4 +29,5 @@ try {
 } finally {
   await new Promise((resolve, reject) => server.httpServer.close(error => error ? reject(error) : resolve()))
 }
+
 

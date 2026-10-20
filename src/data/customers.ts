@@ -24,4 +24,6 @@ const legacyCustomers: LegacyCustomer[] = [
   ['15', 'Polaris Manufacturing AB', 'FIC-SE-1015', 'Sweden', 'Alice Nyström', 'Active'],
 ].map(([id, name, organizationNumber, country, contact, status]) => ({ id, name, organizationNumber, country, contact, status: status as CustomerStatus }))
 
-export const initialCustomers = legacyCustomers.map((customer, index) => fromLegacyCustomer(customer, cities[index]))
+const lastContacts: Record<string, string> = { '1': '2026-10-10', '2': '2026-09-28', '3': '2026-04-01', '4': '2026-10-05', '5': '2026-03-12', '6': '2026-09-22', '7': '2026-08-18', '8': '2025-12-01', '9': '2026-10-08', '10': '2026-10-03', '11': '2026-02-20', '12': '2026-10-16', '13': '2026-01-15', '15': '2026-09-01' }
+export const initialCustomers = legacyCustomers.map((customer, index) => ({ ...fromLegacyCustomer(customer, cities[index]), lastContactDate: lastContacts[customer.id] }))
+

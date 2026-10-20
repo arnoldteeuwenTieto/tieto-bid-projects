@@ -133,3 +133,95 @@ test('bid query searches linked customer names and titles, combines filters and 
   assert.deepEqual(ascending.map(bid => bid.id), descending.map(bid => bid.id).reverse())
   assert.equal(selectBids([], customers, query).length, 0)
 })
+
+const { analyzeDashboard, groupMoney, validDate } = require('../src/analytics/dashboard.ts')
+const { DashboardService } = require('../src/services/DashboardService.ts')
+const filters = { period: 'all', customerId: '', stage: '', category: '' }
+const today = '2026-10-20'
+const sampleBid = (id, stage, extra = {}) => ({ id, customerId: '1', bidTitle: id, stage, category: 'Cloud', sourceSystem: 'mock', createdDate: '2026-10-01', ...extra })
+
+test('dashboard empty data and open-only win rate return N/A without division by zero', () => {
+  const empty = analyzeDashboard([], [], filters, today)
+  assert.equal(empty.winRate, null)
+  assert.equal(empty.open.length, 0)
+  assert.equal(empty.portfolio.length, 0)
+  assert.deepEqual(empty.pipeline.totals, {})
+  assert.deepEqual(empty.stages.map(item => item.count), [0, 0, 0])
+  assert.equal(analyzeDashboard([], [sampleBid('a', 'Draft')], filters, today).winRate, null)
+})
+
+test('win rate uses only won and lost, with actual close dates for period filtering', () => {
+  const bids = [sampleBid('won', 'Won', { createdDate: '2025-01-01', actualCloseDate: '2026-10-10' }), sampleBid('lost', 'Lost', { actualCloseDate: '2026-09-01' }), sampleBid('open', 'Draft'), sampleBid('undated', 'Won')]
+  assert.equal(analyzeDashboard([], bids, filters, today).winRate, 2 / 3)
+  const period = analyzeDashboard([], bids, { ...filters, period: '30' }, today)
+  assert.equal(period.winRate, 1)
+  assert.equal(period.won, 1)
+  assert.equal(period.lost, 0)
+  assert.equal(period.missingClosed, 1)
+  const lostOnly = analyzeDashboard([], [sampleBid('lost', 'Lost')], filters, today)
+  assert.equal(lostOnly.winRate, 0)
+})
+
+test('financial totals separate currencies, exclude closed bids and validate probabilities', () => {
+  const bids = [
+    sampleBid('nok', 'Draft', { estimatedValue: 100, currency: 'NOK', probability: 0.25 }),
+    sampleBid('eur', 'Submitted', { estimatedValue: 200, currency: 'EUR', probability: 0.5 }),
+    sampleBid('invalid-p', 'Draft', { estimatedValue: 300, currency: 'NOK', probability: 1.1 }),
+    sampleBid('zero', 'Draft', { estimatedValue: 0, currency: 'NOK', probability: 0 }),
+    sampleBid('won', 'Won', { estimatedValue: 9999, currency: 'NOK', probability: 1 }),
+    sampleBid('missing', 'Draft'), sampleBid('negative', 'Draft', { estimatedValue: -20, currency: 'NOK', probability: 0.5 }),
+    sampleBid('invalid-currency', 'Draft', { estimatedValue: 20, currency: 'ZZZ', probability: 0.5 }),
+    sampleBid('infinite', 'Draft', { estimatedValue: Infinity, currency: 'NOK', probability: 0.5 }),
+  ]
+  const result = analyzeDashboard([], bids, filters, today)
+  assert.deepEqual(result.pipeline.totals, { NOK: 400, EUR: 200 })
+  assert.deepEqual(result.weighted.totals, { NOK: 25, EUR: 100 })
+  assert.equal(result.pipeline.included, 4)
+  assert.equal(result.weighted.included, 3)
+  assert.equal(groupMoney([sampleBid('none', 'Draft')]).included, 0)
+})
+
+test('creation cohort and customer/stage/category filters consistently affect open metrics', async () => {
+  const customers = await new MockCustomerService().list()
+  const bids = [sampleBid('recent', 'Draft', { estimatedValue: 100, currency: 'NOK', probability: 0.5 }), sampleBid('old', 'Draft', { createdDate: '2025-01-01' }), sampleBid('undated', 'Draft', { createdDate: undefined }), sampleBid('other', 'Submitted', { customerId: '2' }), sampleBid('category', 'Draft', { category: 'Data' })]
+  const scoped = { ...filters, period: '30', customerId: '1', stage: 'Draft', category: 'Cloud' }
+  const result = analyzeDashboard(customers, bids, scoped, today)
+  assert.deepEqual(result.open.map(bid => bid.id), ['recent'])
+  assert.equal(result.pipeline.totals.NOK, 100)
+  assert.equal(result.withOpen.length, 1)
+  assert.equal(result.activeCustomers.length, 1)
+  assert.equal(result.missingCreated, 1)
+  const linked = selectBids(bids, customers, { ...query, customerId: '1', stage: 'Draft', category: 'Cloud', scope: 'open', createdFrom: result.from, createdTo: today })
+  assert.deepEqual(linked.map(bid => bid.id), result.open.map(bid => bid.id))
+})
+
+test('engagement uses explicit contact/activity dates and handles unknown dates separately', async () => {
+  const customer = (await new MockCustomerService().get('1'))
+  const customers = [{ ...customer, lastContactDate: '2026-01-01' }, { ...customer, id: '2', lastContactDate: undefined }, { ...customer, id: '3', lastContactDate: '2027-01-01' }]
+  const bids = [sampleBid('attention', 'Draft', { expectedDecisionDate: '2026-10-25', nextActionDate: '2026-10-19', lastActivityDate: '2026-08-01' }), sampleBid('unknown', 'Draft'), sampleBid('closed', 'Won', { nextActionDate: '2026-01-01' })]
+  const result = analyzeDashboard(customers, bids, filters, today)
+  assert.equal(result.bidAttention.length, 1)
+  assert.equal(result.bidAttention[0].reasons.length, 3)
+  assert.equal(result.withoutContact.length, 1)
+  assert.equal(result.unknownContact.length, 2)
+  assert.equal(result.missingActivity, 1)
+  assert.equal(result.withoutOpen.length, 2)
+  assert.equal(validDate('2026-02-30'), null)
+  assert.equal(validDate('2026-02-28'), '2026-02-28')
+})
+
+test('dashboard reads the same services after bid edits and new customer creation', async () => {
+  const customers = new MockCustomerService()
+  const bids = new MockBidService(customers, [])
+  const service = new DashboardService(customers, bids)
+  const bid = await bids.create(bidInput)
+  let snapshot = await service.snapshot()
+  assert.equal(analyzeDashboard(snapshot.customers, snapshot.bids, filters, today).open.length, 1)
+  await bids.update(bid.id, { stage: 'Won' })
+  const newCustomer = await customers.create({ ...input, organizationNumber: 'FIC-DASH-001' })
+  snapshot = await service.snapshot()
+  const result = analyzeDashboard(snapshot.customers, snapshot.bids, filters, today)
+  assert.equal(result.open.length, 0)
+  assert.equal(result.winRate, 1)
+  assert.ok(result.portfolio.some(customer => customer.id === newCustomer.id))
+})

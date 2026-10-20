@@ -10,6 +10,7 @@ export interface Customer {
   city: string
   country: string
   contactPerson?: string
+  lastContactDate?: string
   status: CustomerStatus
   sourceSystem: SourceSystem
   externalId?: string
@@ -43,3 +44,4 @@ export function mapPowerAppsCustomer(
     city: fields.ForretningsadressePoststed ?? '',
   }
 }
+

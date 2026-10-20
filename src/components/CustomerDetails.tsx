@@ -27,7 +27,7 @@ export function CustomerDetails({ customerId, service, onClose }: { customerId: 
       <div className="detail-buttons">{libraryUrl ? <a href={libraryUrl} className="secondary-button" target="_blank" rel="noopener noreferrer">Customer library<ExternalLink /></a> : <button className="secondary-button" disabled aria-describedby="library-unavailable">Customer library<ExternalLink /></button>}<Link className="secondary-button" to={`/bids${query}`}>Go to Bids<ArrowRight /></Link><Link className="primary-button" to={`/bids/new${query}`}><FilePlus2 />Create New Bid</Link></div>
       {!libraryUrl && <p id="library-unavailable" className="library-note">No trusted customer library is configured.</p>}
       <dl className="detail-list">{[
-        ['Customer name', customer.customerName], ['Organization number', customer.organizationNumber], ['City', customer.city], ['Country', customer.country], ['Contact person', customer.contactPerson || 'Not provided'], ['Status', customer.status], ['Normalized name', customer.normalizedName], ['Application ID', customer.id],
+        ['Customer name', customer.customerName], ['Organization number', customer.organizationNumber], ['City', customer.city], ['Country', customer.country], ['Contact person', customer.contactPerson || 'Not provided'], ['Status', customer.status], ['Last contact', customer.lastContactDate ?? 'Data not available'], ['Normalized name', customer.normalizedName], ['Application ID', customer.id],
       ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || 'Not provided'}</dd></div>)}</dl>
       <div className="related-sections"><CustomerBids customerId={customer.id} /><RelatedSection title="Projects" records={mockProjects.filter(record => record.customerId === customer.id)} basePath="projects" query={query} /><p className="form-note">Related records are fictional demo data.</p></div>
     </>}
@@ -36,5 +36,6 @@ export function CustomerDetails({ customerId, service, onClose }: { customerId: 
 function RelatedSection({ title, records, basePath, query }: { title: string; records: readonly { id: string; name: string; status: string }[]; basePath: string; query: string }) {
   return <section className="related-section" aria-label={`Related ${title.toLowerCase()}`}><h3>{title}<span>{records.length}</span></h3>{records.length ? <ul>{records.map(record => <li key={record.id}><Link to={`/${basePath}/${encodeURIComponent(record.id)}${query}`}><span><strong>{record.name}</strong><small>{record.id} · {record.status}</small></span><ArrowRight /></Link></li>)}</ul> : <p>No related {title.toLowerCase()} in this demo.</p>}</section>
 }
+
 
 
